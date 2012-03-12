@@ -44,6 +44,7 @@ function gm_authorizenet_payment_gateway_managed() {
     'credit' => 'gm_authorizenet_charge',
     'credit_refund' => 'gm_authorizenet_refund',
     'credit_txn_types' => array(UC_CREDIT_AUTH_ONLY, UC_CREDIT_PRIOR_AUTH_CAPTURE, UC_CREDIT_AUTH_CAPTURE, UC_CREDIT_REFERENCE_SET, UC_CREDIT_REFERENCE_TXN),
+    'force_test_mode_callback' => 'gm_authorizenet_use_test_mode',
   );
 
   return $gateways;
@@ -142,6 +143,13 @@ function gm_authorizenet_settings_form($config = array()) {
 
 
   return $form;
+}
+
+/**
+ * Callback to force a config to use test mode
+ */
+function gm_authorizenet_use_test_mode(&$config) {
+  $config['gm_authnet_aim_txn_mode'] = 'live_test';
 }
 
 /**

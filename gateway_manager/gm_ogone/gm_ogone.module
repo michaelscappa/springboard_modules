@@ -258,6 +258,7 @@ function gm_ogone_payment_gateway_managed() {
         'payment_fields_message' => t('After submitting the form you will be taken to Ogone to select your preferred web banking method.'),
       ),
     ),
+    'force_test_mode_callback' => 'gm_ogone_ecommerce_use_test_mode',
   );
   
   $gateways[] = array(
@@ -275,9 +276,27 @@ function gm_ogone_payment_gateway_managed() {
         'txn_types' => array(UC_CREDIT_PRIOR_AUTH_CAPTURE, UC_CREDIT_AUTH_CAPTURE, UC_CREDIT_REFERENCE_TXN),
       ),
     ),
+    'force_test_mode_callback' => 'gm_ogone_directlink_use_test_mode',
   );
 
   return $gateways;
+}
+
+/**
+ * Callback to force a config to use test mode
+ */
+function gm_ogone_ecommerce_use_test_mode(&$config) {
+  $config['gm_ogone_transaction_mode'] = 'test';
+  $config['transaction_mode'] = 'test';
+}
+
+
+/**
+ * Callback to force a config to use test mode
+ */
+function gm_ogone_directlink_use_test_mode(&$config) {
+  $config['gm_ogone_transaction_mode'] = 'test';
+  $config['transaction_mode'] = 'test';
 }
 
 

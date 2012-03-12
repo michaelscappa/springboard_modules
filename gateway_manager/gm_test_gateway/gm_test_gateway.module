@@ -16,6 +16,7 @@ function gm_test_gateway_payment_gateway_managed() {
     'title' => t('Test Gateway'),
     'description' => t('Process credit card payments through the Test Gateway.'),
     'credit' => 'gm_test_gateway_charge',
+    'force_test_mode_callback' => 'gm_test_gateway_use_test_mode',
   );
 
   return $gateways;
@@ -25,6 +26,14 @@ function gm_test_gateway_payment_gateway_managed() {
 /*******************************************************************************
  * Module and Helper Functions
  ******************************************************************************/
+
+/**
+ * Callback to force a config to use test mode
+ */
+function gm_test_gateway_use_test_mode(&$config) {
+  // This is a test gateway: there's nothing to change
+}
+
 
 function gm_test_gateway_charge($order_id, $amount, $data) {
   global $user;

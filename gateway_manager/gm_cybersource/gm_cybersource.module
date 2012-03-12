@@ -79,6 +79,7 @@ function gm_cybersource_payment_gateway_managed() {
     'credit' => 'gm_cybersource_charge',
     'credit_refund' => 'gm_cybersource_refund',
     'credit_txn_types' => array(UC_CREDIT_AUTH_ONLY, UC_CREDIT_PRIOR_AUTH_CAPTURE, UC_CREDIT_AUTH_CAPTURE, UC_CREDIT_REFERENCE_TXN, UC_CREDIT_CREDIT),
+    'force_test_mode_callback' => 'gm_cybersource_use_test_mode',
   );
 
   return $gateways;
@@ -213,6 +214,15 @@ function gm_cybersource_settings_form($config = array()) {
 
   return $form;
 }
+
+
+/**
+ * Callback to force a config to use test mode
+ */
+function gm_cybersource_use_test_mode(&$config) {
+  $config['gm_cybersource_server'] = 'test';
+}
+
 
 function gm_cybersource_charge($order_id, $amount, $data) {
   global $user;
