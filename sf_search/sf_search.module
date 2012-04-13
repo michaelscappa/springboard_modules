@@ -1,0 +1,447 @@
+<?php
+/**
+ * @file
+ * Salesforce search
+ *
+ * Provides interfaces and API methods for searching Salesforce data
+ */
+ 
+/**
+ * Implementation of hook_menu().
+ */
+function sf_search_menu() {
+  $items = array();
+
+  $items['admin/settings/salesforce-management/search'] = array(
+    'title' => t('Search settings'),
+    'description' => t('Salesforce search settings'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('sf_search_settings_form'), 
+    'access arguments' => array('administer salesforce search'),
+    'type' => MENU_NORMAL_ITEM,
+    'file' => 'includes/sf_search.admin.inc',
+  );
+
+  $items['salesforce-search'] = array(
+    'title' => 'Salesforce search test',
+    'description' => 'Test out the available search functions',
+    'page callback' => 'sf_search_test',
+    'access callback' => TRUE,
+    'type' => MENU_NORMAL_ITEM,
+  );
+  
+  $items['js/salesforce-search/lookup/%/%'] = array(
+    'title' => 'Contact lookup',
+    'page callback' => 'sf_search_lookup',
+    'page arguments' => array(3, 4),
+    'access arguments' => array('Find contacts in Salesforce'),
+  );
+  
+  $items['js/salesforce-search/find/%/%'] = array(
+    'title' => 'Contact find',
+    'page callback' => 'sf_search_search',
+    'page arguments' => array(3, 4),
+    'access arguments' => array('Find contacts in Salesforce'),
+  );
+  
+  return $items;
+}
+
+/**
+ * Implmentation of hook_perm().
+ */
+function sf_search_perm() {
+  return array(
+    'Find contacts in Salesforce',
+  );
+}
+
+/**
+ * Find a Salesforce contact by id.
+ *
+ * @param $id
+ *   The id value to find.
+ * @param $field
+ *   The contact field that stores donor id.
+ */
+function sf_search_find_by_id($id, $field) {
+  // get fields that can be used in the query
+  $fields = _sf_search_fieldmap_field_list();
+  // generate a soql statement
+  $soql = _sf_search_create_lookup_query($field, 'string', $id, $fields);  
+  
+  // run query and process results
+  
+}
+
+/**
+ * Performs a full-text SOSL search on Salesforce contacts.
+ *
+ * @param $query
+ *   The value to search for.
+ */
+function sf_search_search($query) {
+  // TODO: implement functionality
+  return _sf_search_stub_data('search');
+}
+
+/**
+ * Performs a contact lookup by donor id field.
+ *
+ * @param $donor_id
+ *   The donor id to lookup.
+ */
+function sf_search_lookup($nid, $donor_id) {
+  // get a data structure that maps Salesforce contact properties to form field keys
+  if ($map = sf_search_create_form_map($nid)) {
+    // get the donor id field
+    $donor_id_field = variable_get('sf_search_donor_id_field', NULL);
+    // TODO: implement functionality
+    $soql = _sf_search_create_lookup_query($donor_id_field, 'string', $donor_id, $map);
+    $data = _sf_search_run_soql_select($soql, $donor_id_field);
+    //print "<pre>".print_r($data, TRUE)."</pre>";
+    //print "<pre>".print_r($shit_bird, TRUE)."</pre>";
+    //print json_decode($data);
+    //print "<pre>".print_r($data, TRUE)."</pre>";
+    //$data = json_decode(_sf_search_stub_data($map, $donor_id_field, 'search'));
+    return drupal_json($data);
+    //return $data;
+  }
+  
+  // TODO: return a structured json response with error message
+  return FALSE;
+}
+
+/**
+ * Stub function for testing contact search without connecting to Salesforce.
+ */
+function _sf_search_stub_data($map, $key_field, $op = 'search') { 
+  $contacts = array();
+  
+  for ($i = 1; $i <= 30; $i++) {
+    $contact = new stdClass();
+    foreach ($map as $key => $value) {
+      $contact->{$key} = $key . $i;
+    }
+    // add key
+    $contact->{$key_field} = $i;
+    $contacts[] = $contact;
+  }
+  
+  if ($op == 'lookup') {
+    return drupal_json(array(array_pop($contacts)));
+  }
+  
+  return drupal_json($contacts);
+}
+
+
+/**
+ * Creates a SOQL statement to find a contact by id field.
+ *
+ * @param $lookup_field
+ *   The field to use for the lookup.
+ * @param $field_type
+ *   The lookup field's data type.
+ * @param $value
+ *   The value to search for in the lookup field.
+ * @param $select_fields
+ *   An array of fields to select.
+ */
+function _sf_search_create_lookup_query($lookup_field, $field_type, $value, $map) {
+  switch ($field_type) {
+    case 'int':
+    case 'boolean':
+    case 'double':
+      return sprintf("SELECT %s FROM Contact WHERE %s = %d", implode(', ', array_keys($map)), $lookup_field, $value);
+      break;
+    default: 
+      return sprintf("SELECT %s FROM Contact WHERE %s = '%s'", implode(', ', array_keys($map)), $lookup_field, $value);
+  }
+}
+
+function _sf_search_run_soql_select($soql, $donor_id_field) {
+  $data = array();  
+  $continue = TRUE;
+  $sf = salesforce_management_api_connect();
+  
+  // make sure we've got a good connection
+  if (is_object($sf)) {
+    $query = $sf->client->query($soql);
+    while ($continue) {
+      for ($i = 0; $i < $query->size; $i++) {
+        $data[] = $query->records[$i];
+      }
+      if ($query->done) {
+        $continue = FALSE;
+      }
+      else {
+        $query = $sf->client->queryMore($query->queryLocator);
+      }
+    }   
+  }
+  
+  return $data;
+}
+
+/**
+ * Return an array of fields that have been mapped in the user -> contact fieldmap.
+ *
+ * @param $reset
+ *   Flag to flush the cached version of the fields and load a fresh copy.
+ */
+function _sf_search_fieldmap_field_list($reset = FALSE) {
+  // get the fieldmap assigned to the authenticated user role
+  static $fields;
+
+  
+  if (empty($fields) || $reset) {
+    $fieldmap = _sf_search_get_user_fieldmap();
+    $fields = array_keys($fieldmap['fields']);
+  }
+  
+  return $fields;
+}
+
+/**
+ * Returns the fieldmap that is assigned to the authenticated user role.
+ */
+function _sf_search_get_user_fieldmap() {
+  $user_fieldmap = cache_get('sf_search_user_fieldmap');
+
+  if (!$user_fieldmap) {
+    $authenticated_user_rid = 2;
+    $fid = salesforce_management_api_fieldmap_rid_load($authenticated_user_rid);
+    if (!empty($fid)) {
+      $user_fieldmap = salesforce_management_api_fieldmap_load($fid);
+      // cache the fieldmap for 1 day
+      cache_set('sf_search_user_fieldmap', $user_fieldmap, 'cache', time() + 360);
+    }
+  }
+  
+  return $user_fieldmap->data;
+}
+
+function sf_search_test() {
+  //print sf_search_lookup();
+  print "<pre>".print_r(_sf_search_get_user_fieldmap(), TRUE)."</pre>";
+  //print _sf_search_create_lookup_query('Drupal_User_Id__c', 'string', 10, _sf_search_fieldmap_field_list());
+  //sf_search_create_form_map(1888, 2);
+  //$shiz = variable_get('sf_search_result_display_fields', array());
+  //print "<pre>".print_r($shiz, TRUE)."</pre>";
+  
+  /*
+  $starttime = microtime(true); 
+  
+  $sf = salesforce_management_api_connect();
+  
+  if (is_object($sf)) {
+    $sosl = 'FIND {cave} returning contact(id, firstname, lastname, email)';
+    $result = $sf->client->search($sosl);
+    $output = "<pre>".print_r($result, TRUE)."</pre>";
+  }
+
+  $endtime = microtime(true); 
+  $totaltime = ($endtime - $starttime); 
+
+  $output .= "<p>This search was conducted in ".$totaltime." seconds</p>";
+  
+  return $output;
+  */
+}
+
+/**
+ * Implementation of hook_donation_form_alter().
+ */
+function sf_search_donation_form_alter(&$form, $mode) {
+  // operate in offline mode only
+  if ($mode === 'offline') {
+    
+    // include our form defintions file
+    module_load_include('inc', 'sf_search', 'includes/sf_search.forms');
+    
+    // add in client side scripts
+    _sf_search_add_scripts();
+    
+    // get the user fieldmap
+    $user_fieldmap = _sf_search_get_user_fieldmap();
+
+    // create some convenience vars
+    $nid = $form['#node']->nid;
+    $fid = $fieldmap['fieldmap'];
+  
+    // add some hidden fields so that our javascript can pluck out some values
+    $form['nid'] = array(
+      '#type' => 'hidden',
+      '#value' => $nid,
+    );
+    
+    $form['fid'] = array(
+      '#type' => 'hidden',
+      '#value' => $fid,
+    );
+  
+    // get the metadata of the mapped object so we can extract some nice field labels  
+    $saleforce_metadata = salesforce_management_api_fieldmap_objects_load('salesforce', $user_fieldmap['salesforce']);
+    
+    // grab the fields that are configured to display in a search resultset
+    $display_fields = variable_get('sf_search_result_display_fields', array());
+
+    // use the component hierarchy to create a javascript data structure that can be used to populate field values client-side
+    $form_map = sf_search_create_form_map($nid, $fid);
+
+    // create a variable to hold the client-side field map
+    $donor_id_field = variable_get('sf_search_donor_id_field', NULL);
+    
+    // create a data structure to hold client-side settings
+    $sf_search_settings = array(
+      'sf_search' => array(
+        'field_map' => array(),
+        'display_columns' => array(),
+        'donor_id_field' => $donor_id_field,
+        'nid' => $nid,
+      ),
+    );
+  
+    /**
+     * iterate over the form map and create some settings to pass over to the client side
+     *
+     * field_map: an array that maps salesforce object properties to form fields (using DOM id)
+     * display_columns: the columns that should display in search results
+     * donor_id_field: the field that represents the unique id of the donor
+     * nid: the node of the form we're altering
+    */
+    foreach($form_map as $key => $field) {
+      if (array_key_exists($field, $form['#component_hierarchy'])) {
+        $sf_search_settings['sf_search']['field_map'][$key] = $form['#component_hierarchy'][$field]['field_id'];
+      }
+    }
+    
+    foreach($display_fields as $key => $field) {
+      if (array_key_exists($key, $saleforce_metadata['fields'])) {
+        if (array_key_exists($key, $display_fields) && $display_fields[$key]) {
+          $sf_search_settings['sf_search']['display_columns'][$key] = $saleforce_metadata['fields'][$key]['label'];
+        }
+      }
+    }
+    
+    // add the donor id field, because it won't be mapped
+    $sf_search_settings['sf_search']['display_columns'] = array($donor_id_field => 'Donor Id') + $sf_search_settings['sf_search']['display_columns'];
+
+    // add client side fieldmap to Drupal.settings
+    drupal_add_js($sf_search_settings, 'setting');
+    
+    
+    
+    //print "<pre>".print_r($form, TRUE)."</pre>";
+    /*
+    $form['search'] = array(
+      '#type' => 'fieldset',
+      '#title' => 'Contact search',
+      '#weight' => 0, // move this to the top
+    );
+    
+    $form['search']['lookup_form'] = array(
+      '#value' => drupal_get_form('sf_search_lookup_form'),
+    );
+    
+    $form['search']['search_form'] = array(
+      '#value' => drupal_get_form('sf_search_search_form'),
+    );
+    
+    $form['search']['search_result'] = array(
+      '#type' => 'markup',
+      '#prefix' => '<div id="#sf-search-result">',
+      '#suffix' => '</div>',
+      '#value' => 'hide me',
+    );
+    */
+    
+    $form['#prefix'] = drupal_get_form('sf_search_lookup_form');
+    $form['#prefix'] .= '<div id="search-results"></div>';
+  }
+}
+
+/**
+ * Implementation of hook_form_alter().
+ */
+function sf_search_form_alter(&$form, $form_state, $form_id) {
+  
+}
+
+/**
+ * Returns a map of Salesforce object property to webform field key.
+ *
+ * @param $nid
+ *   The id of the webform node.
+ */
+function sf_search_create_form_map($nid) {
+  // get the donation form -> profile fieldmap
+  if ($donation_form_fieldmap = _sf_search_form_user_maps($nid)) {  
+    $donation_form_fieldmap = array_flip($donation_form_fieldmap);
+    
+    // get the user -> saleforce fieldmap
+    $user_fieldmap = _sf_search_get_user_fieldmap();
+    
+    // array to hold the resulting map
+    $salesforce_formkey_map = array();
+    
+    // create a new map that denotes which salesforce fields should populate which form fields
+    foreach ($user_fieldmap['fields'] as $salesforce_field => $profile_field) {
+      if (array_key_exists($profile_field, $donation_form_fieldmap)) {
+        $salesforce_formkey_map[$salesforce_field] = $donation_form_fieldmap[$profile_field];
+      }
+    }
+    
+    // add in any display fields that aren't actually mapped
+    $display_fields = variable_get('sf_search_result_display_fields', array());
+    foreach ($display_fields as $key => $value) {
+      if ($value && !array_key_exists($key, $salesforce_formkey_map)) {
+        $salesforce_formkey_map[$key] = NULL;
+      }
+    }
+    
+    // if donor id field isn't mapped, add it
+    $donor_id_field = variable_get('sf_search_donor_id_field', NULL);
+    if (!array_key_exists($donor_id_field, $salesforce_formkey_map)) {
+      $salesforce_formkey_map[$donor_id_field] = NULL; 
+    }
+    
+    return $salesforce_formkey_map;
+  }
+  
+  return FALSE;
+}
+
+/**
+ * Maintains a cache of donation form -> profile fieldmaps for quicker lookups.
+ *
+ * @param $nid
+ *   The id of the webform node.
+ */
+function _sf_search_form_user_maps($nid) {
+  $maps = cache_get('sf_search_donation_profile_maps');
+  
+  if (!$maps || !$maps->data || !array_key_exists($nid, $maps->data)) {
+    $map = fundraiser_user_map($nid);
+    $maps = $maps->data;
+    $maps[$nid] = $map;
+    cache_set('sf_search_donation_profile_maps', $maps, 'cache', time() + 360);  
+  }
+  
+  // return the cached map for this node
+  if (!empty($maps->data[$nid])) {
+    return $maps->data[$nid];
+  }
+  
+  return FALSE;
+}
+
+/**
+ * Adds the module's scripts to the page.
+ */
+function _sf_search_add_scripts() {
+  $path = drupal_get_path('module', 'sf_search');
+  drupal_add_js($path . '/js/jquery.dataTables.js');
+  drupal_add_js($path . '/js/sf_search.js');
+}

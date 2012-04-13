@@ -1,0 +1,10 @@
+name = Salesforce Search
+description = "Provides interfaces and API methods for searching Salesforce data."
+core = 6.x
+
+package = Jackson River Springboard - extras
+
+; Module dependencies
+dependencies[] = salesforce_management_api
+
+version =  6.x-3.0-dev
