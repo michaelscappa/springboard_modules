@@ -19,8 +19,8 @@ function secure_prepopulate_requirements($phase) {
   
   $requirements = array(
     array(
-      'title' => 'Secure pre-populate',
-      'description' => 'The Secure pre-populate module requires the PHP Mcrypt extension has to be installed on the web server.',
+      'title' => t('Secure pre-populate'),
+      'description' => t('The Secure pre-populate module requires the PHP Mcrypt extension has to be installed on the web server.'),
       'severity' => $severity,
     ),
   );
@@ -32,14 +32,12 @@ function secure_prepopulate_requirements($phase) {
  * Implementation of hook_install().
  */
 function secure_prepopulate_install() {
-  drupal_install_schema('secure_prepopulate');
 }
 
 /**
  * Implementation of hook_uninstall().
  */
 function secure_prepopulate_uninstall() {
-  drupal_uninstall_schema('secure_prepopulate');
 }
 
 /**

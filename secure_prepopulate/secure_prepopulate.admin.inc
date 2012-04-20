@@ -9,7 +9,7 @@
 /**
  * System settings form for secure prepopulate.
  */
-function secure_prepopulate_admin_settings(&$form_state) {
+function secure_prepopulate_admin_settings($form, &$form_state) {
   $form = array();
   
   $form['secure_prepopulate_key'] = array(

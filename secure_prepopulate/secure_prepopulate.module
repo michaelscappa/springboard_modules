@@ -7,10 +7,10 @@
  */
 
 /**
- * Implmentation of hook_menu().
+ * Implements hook_menu().
  */
 function secure_prepopulate_menu() {
-  $items['admin/settings/secure-prepopulate'] = array(
+  $items['admin/config/secure-prepopulate'] = array(
     'title' => t('Secure pre-populate'),
     'description' => t('Settings secure pre-populate'),
     'page callback' => 'drupal_get_form',
@@ -41,23 +41,23 @@ function secure_prepopulate_clear($nid) {
   secure_prepopulate_clear_session($nid);
   
   if (user_is_logged_in()) {
+    // log current user out
+    watchdog('user', 'Session closed for %name.', array('%name' => $user->name));
+    module_invoke_all('user_logout', $user);
     session_destroy();
-    $null = NULL;
-    user_module_invoke('logout', $null, $user);
-    $user = drupal_anonymous_user();
   }
   
   drupal_goto('node/' . $nid);
 }
 
 /**
- * Implementation of hook_theme(). 
+ * Implements hook_theme(). 
  */
 function secure_prepopulate_theme() {
   // register a theme function for rendering the 'not me' message
   return array(
     'secure_prepopulate_welcome_message' => array(
-      'arguments' => array('values' => null, 'nid' => null),
+      'variables' => array('values' => null, 'nid' => null),
       'template' => 'secure-prepopulate-welcome-message',
       'pattern' => 'secure_prepopulate_welcome_message_[0-9]+',
     ),
@@ -65,27 +65,38 @@ function secure_prepopulate_theme() {
 }
 
 /**
- * Implemenation of hook_node_api(). 
+ * Implements hook_node_view(). 
  * 
  * Adds a welcome_back key to the node for themeing and output.
  */
-function secure_prepopulate_nodeapi(&$node, $op, $teaser = NULL, $page = NULL) {
-  // first check to see if there is any prepopulate values available
-  if (is_array($_SESSION['secure_prepopulate_values'])) {
-    if ($op == 'view' && $page && !empty($node->webform) && array_key_exists($node->nid, $_SESSION['secure_prepopulate_values'])) {
+function secure_prepopulate_node_view($node, $view_mode, $langcode) {
+  // first check to see if there are any prepopulate values available
+  if (isset($_SESSION['secure_prepopulate_values']) && is_array($_SESSION['secure_prepopulate_values'])) {
+    if ($view_mode == 'full' && !empty($node->webform) && array_key_exists($node->nid, $_SESSION['secure_prepopulate_values'])) {
       $node->content['welcome_back'] = array(
-        '#value' => theme(array('secure_prepopulate_welcome_message_' . $node->nid, 'secure_prepopulate_welcome_message'), $_SESSION['secure_prepopulate_values'][$node->nid], $node->nid),
         '#weight' => -1,
+        '#markup' => theme(
+          array('secure_prepopulate_welcome_message_' . $node->nid, 'secure_prepopulate_welcome_message'),
+          array(
+            'values' => $_SESSION['secure_prepopulate_values'][$node->nid],
+            'nid' => $node->nid,
+          )
+        ),
       );
     }
   }
 }
 
 /**
- * Implementation of hook_perm().
+ * Implements hook_permission().
  */
-function secure_prepopulate_perm() {
-  return array('administer secure pre-populate');
+function secure_prepopulate_permission() {
+  return array(
+    'administer secure pre-populate' => array(
+      'title' => t('Administer Secure Pre-Populate settings'),
+      'restrict access' => TRUE,
+    ),
+  );
 }
 
 /**
@@ -93,7 +104,7 @@ function secure_prepopulate_perm() {
  */
 function secure_prepopulate_init() {
   // check for the presence of the af query string parameter and we're on a node page
-  if (isset($_GET['af']) && arg(0) == 'node' && is_numeric(arg(1))) {
+  if (isset($_GET['af']) && arg(0) == 'node' && is_numeric(arg(1)) && !arg(2)) {
     $af = $_GET['af'];
     $nid = arg(1);
     // Use the full query string for hash expiration.
@@ -283,7 +294,9 @@ function secure_prepopulate_login_user($uid) {
     $user = user_load($uid);
     if ($user) {
       // log the user in
-      return user_external_login($user);
+      $form_state['uid'] = $user->uid;
+      user_login_submit(array(), $form_state);
+      return TRUE;
     }
     return FALSE;
   }
@@ -340,7 +353,11 @@ function secure_prepopulate_parse_qs($qs) {
  */
 function secure_prepopulate_is_expired($qs) {
   $qs_hashed = md5($qs);
-  $result = db_result(db_query("SELECT COUNT(hash) FROM {secure_prepopulate_expired} WHERE hash = '%s'", $qs_hashed));
+  $result = db_query(
+    "SELECT COUNT(hash) FROM {secure_prepopulate_expired} WHERE hash = :hashed",
+    array(':hashed' => $qs_hashed)
+  )->fetchField();
+
   // if no results it's a new query string
   if ($result == 0) {
     return FALSE;
@@ -381,7 +398,10 @@ function secure_prepopulate_clear_session($nid) {
  *   The country code to convert.
  */
 function _secure_prepopulate_convert_country($country) {
-  $code = db_result(db_query("SELECT country_id FROM {uc_countries} WHERE country_iso_code_2 = '%s'", $country));
+  $code = db_query(
+    "SELECT country_id FROM {uc_countries} WHERE country_iso_code_2 = :country",
+    array(':country' => $country)
+  )->fetchField();
   if (!empty($code)) {
     return $code;
   }
@@ -396,7 +416,10 @@ function _secure_prepopulate_convert_country($country) {
  *   The state abbreviation to convert.
  */
 function _secure_prepopulate_convert_state($state) {
-  $code = db_result(db_query("SELECT zone_id FROM {uc_zones} WHERE zone_code = '%s'", $state));  
+  $code = db_query(
+    "SELECT zone_id FROM {uc_zones} WHERE zone_code = :state", 
+    array(':state' => $state)
+  )->fetchField();
   if (!empty($code)) {
     return $code;
   }
@@ -427,7 +450,7 @@ function _secure_prepopulate_parse_form($nid, $components) {
 }
 
 /**
- * Builds a path from the webform component to it's topmost parent.
+ * Builds a path from the webform component to its topmost parent.
  *
  * @param $nid
  *   The nid of the node that contains the webform.
@@ -438,8 +461,11 @@ function _secure_prepopulate_parse_form($nid, $components) {
  *   This path is built up using recursion.
  */
 function _secure_prepopulate_walk_component_hierarchy($nid, $cid, &$path = array()) {
-  $result = db_query("SELECT cid, pid, form_key FROM {webform_component} WHERE nid = %d and cid = %d", $nid, $cid);
-  while ($data = db_fetch_object($result)) {
+  $result = db_query(
+    "SELECT cid, pid, form_key FROM {webform_component} WHERE nid = :nid and cid = :cid",
+    array(':nid' => $nid, ':cid' => $cid)
+  );
+  while ($data = $result->fetchObject()) {
     array_unshift($path, $data->form_key);
     if ($data->pid > 0) {
       _secure_prepopulate_walk_component_hierarchy($nid, $data->pid, $path);
@@ -458,14 +484,14 @@ function _secure_prepopulate_walk_component_hierarchy($nid, $cid, &$path = array
  */
 function &_secure_prepopulate_find_field(&$form, $path) {
   if (is_array($path)) {
-  foreach(array_keys($path) as $v) {
-    if (is_array($path[$v]) && count($path[$v])) { // if there are more keys
-      return _secure_prepopulate_find_field($form[$v], $path[$v]);
+    foreach(array_keys($path) as $v) {
+      if (is_array($path[$v]) && count($path[$v])) { // if there are more keys
+        return _secure_prepopulate_find_field($form[$v], $path[$v]);
+      }
+      else {
+        return $form[$v];
+      }
     }
-    else {
-      return $form[$v];
-    }
-  }
   }
 }
 
