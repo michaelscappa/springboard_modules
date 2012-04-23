@@ -57,8 +57,9 @@ function secure_prepopulate_theme() {
   // register a theme function for rendering the 'not me' message
   return array(
     'secure_prepopulate_welcome_message' => array(
-      'variables' => array('values' => null, 'nid' => null),
-      'template' => 'secure-prepopulate-welcome-message',
+      'variables' => array('values' => NULL, 'nid' => NULL),
+      'template' => 'secure-prepopulate-welcome',
+      'path' => drupal_get_path('module', 'secure_prepopulate') . '/templates',
       'pattern' => 'secure_prepopulate_welcome_message_[0-9]+',
     ),
   );
@@ -114,7 +115,7 @@ function secure_prepopulate_init() {
     // run af param through decryption routine
       if ($fields = secure_prepopulate_decrypt($af)) {
         $_SESSION['secure_prepopulate_values'][$nid] = $fields;
-        if ($fields['uid']) {
+        if (isset($fields['uid']) && is_numeric($fields['uid'])) {
           secure_prepopulate_login_user($fields['uid']);
         }
         // expire the query string
@@ -130,8 +131,7 @@ function secure_prepopulate_init() {
 function secure_prepopulate_form_alter(&$form, $form_state, $form_id) {
   // make sure the node has a webform
   if (strstr($form_id, 'webform_client_form')) {
-  
-    $node = $form['#parameters'][2];
+    $node = $form['#node'];
 
     // see if the user has any pre-popluate data for this node in their session
     $prepopulate_data = isset($_SESSION['secure_prepopulate_values'][$node->nid]) ? $_SESSION['secure_prepopulate_values'][$node->nid] : NULL;
@@ -152,7 +152,7 @@ function secure_prepopulate_form_alter(&$form, $form_state, $form_id) {
  * After build form alteration routine to ensure that url prepopulation is the last thing that happens.
  */
 function secure_prepopulate_after_build($form, &$form_state) {
-  $node = $form['#parameters'][2];
+  $node = $form['#node'];
   
   // see if the user has any pre-populate data for this node in their session
   $prepopulate_data = isset($_SESSION['secure_prepopulate_values'][$node->nid]) ? $_SESSION['secure_prepopulate_values'][$node->nid] : array();
@@ -170,6 +170,8 @@ function secure_prepopulate_after_build($form, &$form_state) {
 
   // try to prepopulate any fields found in the prepopulate_data array
   foreach ($prepopulate_data as $form_key => $value) {
+    if (!isset($component_hierarchy[$form_key])) 
+      continue;
     if ($field =& _secure_prepopulate_find_field($form, $component_hierarchy[$form_key])) {
       switch ($field['#type']) {
         case 'radios':
@@ -363,7 +365,7 @@ function secure_prepopulate_is_expired($qs) {
     return FALSE;
   }
   
-  watchdog('Secure pre-populate', t('Attempted use of encrypted query string @q', array('@q' => $qs_hashed), NULL, WATCHDOG_NOTICE));
+  watchdog('Secure pre-populate', t('Attempted use of encrypted query string @q', array('@q' => $qs_hashed)), NULL, WATCHDOG_NOTICE);
   return TRUE;
 }
 

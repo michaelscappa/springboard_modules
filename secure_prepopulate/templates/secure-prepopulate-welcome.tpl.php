@@ -12,8 +12,8 @@
  * - $values: An array of key/value pairs that were passed in via query string.
  * - $nid: The nid of the node for which the values apply.
  */
-?>
 
+?>
 <div id="welcome-back">
-  Welcome back <? print $values['first_name']; ?>. Not <? print $values['first_name']; ?>? <? print l('Click here', 'secure-prepopulate/not-me/' . $nid); ?>
+  Welcome back <?php print $values['first_name']; ?>. Not <?php print $values['first_name']; ?>? <?php print l('Click here', 'secure-prepopulate/not-me/' . $nid); ?>
 </div>
