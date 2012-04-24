@@ -6,6 +6,8 @@
  * Fundraiser module submission tests.
  */
 
+// JoelR, 4/23/2012: disabling ?>
+<!-- 
 
 class FundraiserGoalsUITestCase extends FundraiserTestCase {
   /**
@@ -87,3 +89,5 @@ class FundraiserGoalsUITestCase extends FundraiserTestCase {
 
   
 }
+
+-->

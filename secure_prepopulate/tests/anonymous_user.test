@@ -22,7 +22,7 @@ class AnonymousUserTestCase extends SecurePrepopulateTestCase {
    */
   function testAnonymousPopulate() {
     $node = $this->webformNode();
-    $this->drupalGet('node/' . $node->nid);
+    $this->drupalGet('node/' . $node->nid, array('query' => array('af' => $this->_encrypted)));
     $this->pass(var_export($this->drupalGetContent(), TRUE)); 
   }
 }

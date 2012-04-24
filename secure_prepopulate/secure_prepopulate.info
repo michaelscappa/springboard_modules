@@ -5,3 +5,6 @@ core = 7.x
 package = Jackson River Springboard - extras
 dependencies[] = webform
 version =  7.x-3.0-dev
+
+files[] = tests/secure_prepopulate.test
+files[] = tests/anonymous_user.test
