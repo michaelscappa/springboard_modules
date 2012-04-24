@@ -112,7 +112,7 @@ function secure_prepopulate_init() {
     $qs = !empty($_SERVER['QUERY_STRING']) ? $_SERVER['QUERY_STRING'] : 'q=node/' . $nid . '&af=' . $af;
     // first, check to see if the query string has already been used
     if (!secure_prepopulate_is_expired($qs)) {
-    // run af param through decryption routine
+      // run af param through decryption routine
       if ($fields = secure_prepopulate_decrypt($af)) {
         $_SESSION['secure_prepopulate_values'][$nid] = $fields;
         if (isset($fields['uid']) && is_numeric($fields['uid'])) {

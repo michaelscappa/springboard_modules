@@ -8,3 +8,4 @@ version =  7.x-3.0-dev
 
 files[] = tests/secure_prepopulate.test
 files[] = tests/anonymous_user.test
+files[] = tests/expired_string.test

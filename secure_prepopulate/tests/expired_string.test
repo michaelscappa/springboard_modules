@@ -1,0 +1,37 @@
+<?php
+
+/**
+ * @file
+ * Secure prepopulate tests for expired query string.
+ */
+
+include_once(dirname(__FILE__) . '/secure_prepopulate.test');
+
+class ExpiredStringTestCase extends SecurePrepopulateTestCase {
+  
+  public static function getInfo() {
+    return array(
+      'name' => 'Secure pre-populate expired string tests',
+      'description' => 'Tests secure pre-populate with an expired query string.',
+      'group' => 'Springboard',
+    );
+  }
+  
+  /**
+   * Test pre-population for an expired query string
+   */
+  function testExpiredString() {
+    $node = $this->webformNode();
+    
+    // pre-expire the query string
+    $qs = 'af=' . $this->_encrypted;  // this is what $_SERVER['QUERY_STRING'] will be in the unit test environment
+    secure_prepopulate_expire($qs);
+    
+    $this->drupalGet('node/' . $node->nid, array('query' => array('af' => $this->_encrypted)));
+    $this->assertFieldByName('submitted[first_name]');
+    $this->assertFieldByName('submitted[last_name]');
+    $this->assertNoFieldByName('submitted[first_name]', 'Euro', t('First Name field was not prepopulated.'));
+    $this->assertNoFieldByName('submitted[last_name]', 'Guy', t('Last Name field was not prepopulated.'));
+    $this->pass(var_export($this->drupalGetContent(), TRUE)); 
+  }
+}

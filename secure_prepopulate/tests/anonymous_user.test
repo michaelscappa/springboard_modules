@@ -23,6 +23,8 @@ class AnonymousUserTestCase extends SecurePrepopulateTestCase {
   function testAnonymousPopulate() {
     $node = $this->webformNode();
     $this->drupalGet('node/' . $node->nid, array('query' => array('af' => $this->_encrypted)));
+    $this->assertFieldByName('submitted[first_name]', 'Euro');
+    $this->assertFieldByName('submitted[last_name]', 'Guy');
     $this->pass(var_export($this->drupalGetContent(), TRUE)); 
   }
 }
