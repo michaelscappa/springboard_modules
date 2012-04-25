@@ -24,10 +24,12 @@ class ExpiredStringTestCase extends SecurePrepopulateTestCase {
     $node = $this->webformNode();
     
     // pre-expire the query string
-    $qs = 'af=' . $this->_encrypted;  // this is what $_SERVER['QUERY_STRING'] will be in the unit test environment
+    $qs = _secure_prepopulate_stringify_get(
+      array('q' => "node/$node->nid", 'af' => $this->_encrypted)
+    );
     secure_prepopulate_expire($qs);
     
-    $this->drupalGet('node/' . $node->nid, array('query' => array('af' => $this->_encrypted)));
+    $this->drupalGet("node/$node->nid", array('query' => array('af' => $this->_encrypted)));
     $this->assertFieldByName('submitted[first_name]');
     $this->assertFieldByName('submitted[last_name]');
     $this->assertNoFieldByName('submitted[first_name]', 'Euro', t('First Name field was not prepopulated.'));
