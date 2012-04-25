@@ -56,9 +56,34 @@ function fundraiser_perm() {
 }
 
 /**
+ * Renders a donation form in offline mode.
+ */
+function fundraiser_offline_mode($node) {
+  $submission = NULL;
+  $is_draft = FALSE;
+  $form = !empty($node->webform['components']) ? drupal_get_form('webform_client_form_' . $node->nid, $node, $submission, $is_draft) : '';
+  //$output = theme('webform_view', $node, $teaser, $page, $form, $enabled);
+  //print "<pre>".print_r($form, TRUE)."</pre>";
+  //return $form;
+  //print "<pre>".print_r($form, TRUE)."</pre>";
+  return $form;
+}
+
+
+
+/**
  * Implements hook_menu().
  */
 function fundraiser_menu() {
+  
+  $items['node/%node/offline'] = array(
+    'title' => 'Offline',
+    'page callback' => 'fundraiser_offline_mode',
+    'page arguments' => array(1),
+    'access callback' => 'node_access',
+    'access arguments' => array('view', 1),
+    'type' => MENU_LOCAL_TASK,
+  );
 
 	$items['admin/settings/fundraiser'] = array(
 		'title' => 'Fundraiser settings',
@@ -333,6 +358,12 @@ function fundraiser_preprocess_page(&$vars) {
   if (arg(2) == 'confirmation') {
     // add the node to $vars
     $vars['node'] = node_load(arg(1));
+  }
+  
+  // use a different template in offline mode  
+  if (arg(0) == 'node' && arg(2) == 'offline') {
+    //drupal_add_css(drupal_get_path('module', 'fundraiser') . '/bootstrap.min.css', 'module', 'all');
+    //$vars['template_file'] = 'page-fundraiser-offline';
   }
 }
 
@@ -802,6 +833,13 @@ function fundraiser_clone_form($form, &$form_state) {
 }
 
 /**
+ * Determines if a donation form is currently running in offline mode.
+ */
+function _fundraiser_is_offline_mode($form_state) {
+  return arg(2) == 'offline' || $form_state['storage']['offline'];
+}
+
+/**
  * Implementation of hook_form_alter().
  */
 function fundraiser_form_alter(&$form, $form_state, $form_id) {
@@ -869,6 +907,17 @@ function fundraiser_form_alter(&$form, $form_state, $form_id) {
         $form['submitted']['donor_information']['email']['#suffix'] = '</div>';        
     }
     
+    if ($node->type == 'donation_form' && arg(2) == 'offline') {
+      // handle offline form processing;
+      $form['submitted']['offline'] = array(
+        '#type' => 'textfield',
+        '#title' => 'Is offline',
+        '#default_value' => 'Yes',
+      );
+      
+      
+    }
+    
     // handle the donation form itself
     if ($node->type == 'donation_form' && arg(2) != 'submission')
 		{
@@ -876,32 +925,59 @@ function fundraiser_form_alter(&$form, $form_state, $form_id) {
 			drupal_add_js($base .'/jquery.alphanumeric.js');
 			drupal_add_js($base .'/fundraiser.js');
 			drupal_add_css($base . '/fundraiser-donation-form.css');
-	
+	   	
+	   	// default to online mode
+	   	$current_mode = 'online';
+	   	
 			$components = $node->webform['components'];
-      // create an data structure that will tell us exactly where each webform component lives in the FAPI array
-      $component_hierarchy = fundraiser_parse_components($node->nid, $components);     			
 			
-			// preload any fields if the user is logged in
-      if (user_is_logged_in()) {
-				// load up map
-				$map = fundraiser_user_map($node->nid);
-				// load up any mapped profile fields
-				foreach($map as $field_key => $profile_key) {
-				  $field =& fundraiser_find_field($form, $component_hierarchy[$field_key]);
-				  if (empty($field['#default_value'])) {
-				    if (property_exists($user, $profile_key)) {
-				      switch ($field['#type']) {
-				        case 'checkboxes':
-				          $field['#default_value'] = array($user->$profile_key); 
-				          break;
-				        
-				        default:
-				          $field['#default_value'] = $user->$profile_key;
-				      }
-				    }
-				  }
-				}
-			}
+      // create an data structure that will tell us exactly where each webform component lives in the FAPI array
+      $component_hierarchy = fundraiser_parse_components($node->nid, $components);     	
+      		
+      // stash the component hierarchy in the form so that other modules can utilize it.
+      $form['#component_hierarchy'] = $component_hierarchy;
+      
+        // preload any fields if the user is logged in
+        if (user_is_logged_in()) {
+  				// load up map
+  				$map = fundraiser_user_map($node->nid);
+  				// load up any mapped profile fields
+  				foreach($map as $field_key => $profile_key) {
+  				  $field =& fundraiser_find_field($form, $component_hierarchy[$field_key]);
+  				  if (empty($field['#default_value'])) {
+  				    if (property_exists($user, $profile_key)) {
+  				      switch ($field['#type']) {
+  				        case 'checkboxes':
+  				          $field['#default_value'] = array($user->$profile_key); 
+  				          break;
+  				        
+  				        default:
+  				          $field['#default_value'] = $user->$profile_key;
+  				      }
+  				    }
+  				  }
+  				}
+  				// alter country drop down to populate zone drop down via ahah
+          $country_field =& fundraiser_find_field($form, $component_hierarchy['country']);
+          $country_field['#ahah'] = array('path' => 'fundraiser/js/state', 'wrapper' => 'zone-select-wrapper');
+          
+          // add default country & state values from user profile
+          $fids = _fundraiser_get_profile_location_fields();
+          if ($fids['country'] && $user->profile_country) {
+            $country_field['#default_value'] = db_result(db_query('SELECT uc.country_id FROM {uc_countries} uc INNER JOIN {profile_values} pv ON pv.value = uc.country_iso_code_2 AND pv.uid = %d AND pv.fid = %d', $user->uid, $fids['country']));
+          }
+          
+          // add a wrapper around the state field so it can be replaced via ajax			
+          $state_field =& fundraiser_find_field($form, $component_hierarchy['state']);
+          if ($fids['state'] && $user->profile_state) {
+            $state_field['#default_value'] = db_result(db_query('SELECT uz.zone_id FROM {uc_zones} uz INNER JOIN {profile_values} pv ON pv.value = uz.zone_code AND pv.uid = %d AND pv.fid = %d', $user->uid, $fids['state']));
+          } 
+  			}
+  			
+        // add a validation handler and two additional submit handlers
+        $form['#validate'][] = 'fundraiser_webform_validate';	
+			
+			
 			
 			// combine expiration month and year into a single component
 			$cc_exp_month_field =& fundraiser_find_field($form, $component_hierarchy['card_expiration_month']);
@@ -939,21 +1015,6 @@ function fundraiser_form_alter(&$form, $form_state, $form_id) {
 			$cc_exp_month_field = NULL;
 			$cc_exp_year_field = NULL;
 			
-			// alter country drop down to populate zone drop down via ahah
-			$country_field =& fundraiser_find_field($form, $component_hierarchy['country']);
-      $country_field['#ahah'] = array('path' => 'fundraiser/js/state', 'wrapper' => 'zone-select-wrapper');
-      
-      // add default country & state values from user profile
-      $fids = _fundraiser_get_profile_location_fields();
-      if ($fids['country'] && $user->profile_country) {
-        $country_field['#default_value'] = db_result(db_query('SELECT uc.country_id FROM {uc_countries} uc INNER JOIN {profile_values} pv ON pv.value = uc.country_iso_code_2 AND pv.uid = %d AND pv.fid = %d', $user->uid, $fids['country']));
-      }
-
-      // add a wrapper around the state field so it can be replaced via ajax			
-			$state_field =& fundraiser_find_field($form, $component_hierarchy['state']);
-			if ($fids['state'] && $user->profile_state) {
-			  $state_field['#default_value'] = db_result(db_query('SELECT uz.zone_id FROM {uc_zones} uz INNER JOIN {profile_values} pv ON pv.value = uz.zone_code AND pv.uid = %d AND pv.fid = %d', $user->uid, $fids['state']));
-			}
 			$state_field['#prefix'] = '<div id="zone-select-wrapper">'; 
 			$state_field['#suffix'] = '</div>'; 
       
@@ -969,18 +1030,70 @@ function fundraiser_form_alter(&$form, $form_state, $form_id) {
         $state_field['#options'] = fundraiser_get_country_zones($country_field['#default_value']); // default country as defined in the component definition
 			}
 
-			// add a validation handler and two additional submit handlers
-			$form['#validate'][] = 'fundraiser_webform_validate';
 			$form['#submit'][] = 'fundraiser_webform_submit';
 			$form['#submit'][] = 'fundraiser_confirmation';
       $form['submit']['#suffix'] = '<div class="fundraiser_submit_message">' . theme('image', drupal_get_path('module', 'fundraiser') . '/padlock.gif') . t('By clicking SUBMIT DONATION your credit card will be securely processed.') . '</div>';
+		
+		  // determine if we're in offline mode
+      if (_fundraiser_is_offline_mode($form_state)) {
+        $current_mode = 'offline';
+        // mapp
+        $form_state['storage']['offline'] = TRUE;
+        $email_field =& fundraiser_find_field($form, $component_hierarchy['email']);
+        $email_field['#required'] = FALSE;
+        $form['#action'] = '/node/' . $form['#node']->nid . '/offline';
+        $form['#theme'] = 'fundraiser_offline_donation';
+        $form['#attributes']['class'] = 'form-horizontal';
+       // $form['#redirect'] = 'offline';
+       // $form_state['#redirect'] = 'node/' . $form_state['nid'] . '/offline';
+       // remove normal validation and replace with offline validation
+       
+       unset($form['#validate']);
+       $form['#validate'][] = 'webform_client_form_validate';
+       $form['#validate'][] = 'fundraiser_offline_validate';	
+       //print "<pre>".print_r($form['#validate'], TRUE)."</pre>";
+
+        //print "<pre>".print_r($email_field, TRUE)."</pre>";
+        //print "<pre>".print_r($form['#validate'], TRUE)."</pre>";
+      }
+		
+		  // allow other modules to alter this donation form
+		  drupal_alter('donation_form', $form, $current_mode);
+		
 		}
 	}
 
 	return $form;
 }
 
+function hozen_dohzen($component_hierarchy) {
+  $hozen = array();
+  foreach ($component_hierarchy as $form_key => $component) {
+    $hozen[$form_key] = fundraiser_field_ids($component);
+  }
+  print "<pre>".print_r($hozen, TRUE)."</pre>";
+}
 
+function fundraiser_field_ids($component) {
+  //print "<pre>".print_r($component, TRUE)."</pre>";
+  foreach ($component as $key => $field) {
+    $shiz .= $key;
+    if (is_array($field)) {
+      fundraiser_field_ids($field);
+    }
+  }
+  return $shiz;
+  
+  foreach(array_keys($component) as $v) {
+    if (is_array($path[$v]) && count($path[$v])) { // if there are more keys
+      return fundraiser_find_field($form[$v], $path[$v]);
+    }
+    else {
+      return $form[$v];
+    }
+  }
+  
+}
 
 /**
  * Creates an array to map webform component fields to user profile fields.
@@ -1027,9 +1140,13 @@ function &fundraiser_find_field(&$form, $path) {
 function fundraiser_parse_components($nid, $components) {
   $component_hierarchy = array();
   foreach($components as $cid => $component) {
-    $component_path = 'submitted[' . implode('][', fundraiser_walk_component_hierarchy($nid, $cid)) . ']';
+    $component_path_array = fundraiser_walk_component_hierarchy($nid, $cid);
+    $component_path = 'submitted[' . implode('][', $component_path_array) . ']';
+    $field_id = str_ireplace('_', '-', implode('-', $component_path_array));
     parse_str($component_path, $output); // convert string to a nested array
     $component_hierarchy[$component['form_key']] = $output;
+    // add the field's form id for client side processing
+    $component_hierarchy[$component['form_key']]['field_id'] = 'edit-submitted-' . $field_id;
   }
   return $component_hierarchy;
 }
@@ -1371,6 +1488,12 @@ function fundraiser_preprocess_sustainer_management_page(&$vars) {
     $payment_schedule['status'] = empty($payment_schedule['status']) ? 'pending' : $payment_schedule['status'];
   }
   $vars['payment_schedule'] = theme('table', $payment_schedule_header, $vars['payment_schedule']);
+}
+
+function fundraiser_offline_validate($form, &$form_state) {
+  drupal_set_message('foo');
+  $form_state['storage']['offline'] = TRUE;
+  form_set_error('email', t('Offline validation sucka!'));
 }
 
 /**
@@ -2300,13 +2423,24 @@ function fundraiser_order_actions($order) {
   }
 }
 
+function theme_fundraiser_offline_donation($form) {
+  // fancy up our form a bit for offline processing
+  $form['#attributes']['class'] = 'form-horizontal';
+  $form['submitted']['donation']['other_amount']['#field_prefix'] = '';
+  $form['submitted']['donation']['other_amount']['#field_prefix'] = '<span class="add-on">@</span>';
+  return drupal_render($form);
+}
+
 /**
 * Implementation of hook_theme().
 */
 function fundraiser_theme() {
   return array(
+    'fundraiser_offline_donation' => array(
+      'arguments' => array(),
+    ),
     'fundraiser_mapping_form' => array(
-    'arguments' => array(),
+      'arguments' => array(),
     ),
     'sustainer_management_page' => array(
       'template' => 'sustainer-management-page',

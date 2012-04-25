@@ -80,9 +80,28 @@ function sf_search_find_by_id($id, $field) {
  * @param $query
  *   The value to search for.
  */
-function sf_search_search($query) {
-  // TODO: implement functionality
-  return _sf_search_stub_data('search');
+function sf_search_search($nid, $query) {   // get a data structure that maps Salesforce contact properties to form field keys
+  if ($map = sf_search_create_form_map($nid)) {
+    $donor_id_field = variable_get('sf_search_donor_id_field', NULL);
+    // TODO: implement functionality
+    //$soql = _sf_search_create_lookup_query($donor_id_field, 'string', $donor_id, $map);
+    //$data = _sf_search_run_soql_select($soql, $donor_id_field);
+    //print "<pre>".print_r($data, TRUE)."</pre>";
+    //print "<pre>".print_r($shit_bird, TRUE)."</pre>";
+    //print json_decode($data);
+    //print "<pre>".print_r($data, TRUE)."</pre>";
+    //print "<pre>".print_r($map, TRUE)."</pre>";
+    //$data = json_decode(_sf_search_stub_data($map, $donor_id_field, 'search'));
+    //return drupal_json($data);
+    //return $data;
+    
+    $sosl = _sf_search_create_search_query($query, $map);
+    $data = _sf_search_run_search($sosl);
+    return drupal_json($data);
+  }
+  
+  // TODO: return a structured json response with error message
+  return FALSE;
 }
 
 /**
@@ -98,7 +117,7 @@ function sf_search_lookup($nid, $donor_id) {
     $donor_id_field = variable_get('sf_search_donor_id_field', NULL);
     // TODO: implement functionality
     $soql = _sf_search_create_lookup_query($donor_id_field, 'string', $donor_id, $map);
-    $data = _sf_search_run_soql_select($soql, $donor_id_field);
+    $data = _sf_search_run_soql_select($soql);
     //print "<pre>".print_r($data, TRUE)."</pre>";
     //print "<pre>".print_r($shit_bird, TRUE)."</pre>";
     //print json_decode($data);
@@ -160,7 +179,17 @@ function _sf_search_create_lookup_query($lookup_field, $field_type, $value, $map
   }
 }
 
-function _sf_search_run_soql_select($soql, $donor_id_field) {
+function _sf_search_create_search_query($query, $map) {
+  return sprintf("FIND {%s} returning contact(%s)", $query, implode(', ', array_keys($map)));
+}
+
+/**
+ * Runs a SOQL select statement and returns all records.
+ *
+ * @param $soql
+ *   The SOQL string to run.
+ */
+function _sf_search_run_soql_select($soql) {
   $data = array();  
   $continue = TRUE;
   $sf = salesforce_management_api_connect();
@@ -179,6 +208,28 @@ function _sf_search_run_soql_select($soql, $donor_id_field) {
         $query = $sf->client->queryMore($query->queryLocator);
       }
     }   
+  }
+  
+  return $data;
+}
+
+function _sf_search_run_search($sosl) {
+  $data = array();
+  $sf = salesforce_management_api_connect();
+
+  if (is_object($sf)) {
+    $result = $sf->client->search($sosl);
+    if ($result->searchRecords) {
+      // deal with salesforce's inconsistent returns
+      if (is_array($result->searchRecords)) {
+        foreach ($result->searchRecords as $record) {
+          $data[] = $record->record;
+        }
+      }
+      else {
+        $data[] = $result->searchRecords->record;
+      }
+    }
   }
   
   return $data;
@@ -254,6 +305,12 @@ function sf_search_test() {
  * Implementation of hook_donation_form_alter().
  */
 function sf_search_donation_form_alter(&$form, $mode) {
+  //print "<pre>".print_r($form['submitted']['billing_information']['country']['#options'], TRUE)."</pre>";
+  
+  //$country_field =& fundraiser_find_field($form, $form['#component_hierarchy']['country']);
+  // print "<pre>".print_r($country_field['#options'], TRUE)."</pre>";
+  
+  
   // operate in offline mode only
   if ($mode === 'offline') {
     
@@ -268,8 +325,8 @@ function sf_search_donation_form_alter(&$form, $mode) {
 
     // create some convenience vars
     $nid = $form['#node']->nid;
-    $fid = $fieldmap['fieldmap'];
-  
+    $fid = $user_fieldmap['fieldmap'];
+
     // add some hidden fields so that our javascript can pluck out some values
     $form['nid'] = array(
       '#type' => 'hidden',
@@ -293,6 +350,12 @@ function sf_search_donation_form_alter(&$form, $mode) {
     // create a variable to hold the client-side field map
     $donor_id_field = variable_get('sf_search_donor_id_field', NULL);
     
+    // get a list of countries to store client-side
+    $countries = _sf_search_countries();
+    
+    // get a list of zones to store client-side
+    $zones = _sf_search_zones();
+      
     // create a data structure to hold client-side settings
     $sf_search_settings = array(
       'sf_search' => array(
@@ -300,6 +363,8 @@ function sf_search_donation_form_alter(&$form, $mode) {
         'display_columns' => array(),
         'donor_id_field' => $donor_id_field,
         'nid' => $nid,
+        'countries' => $countries,
+        'zones' => $zones,
       ),
     );
   
@@ -358,6 +423,7 @@ function sf_search_donation_form_alter(&$form, $mode) {
     */
     
     $form['#prefix'] = drupal_get_form('sf_search_lookup_form');
+    $form['#prefix'] .= drupal_get_form('sf_search_search_form');
     $form['#prefix'] .= '<div id="search-results"></div>';
   }
 }
@@ -438,10 +504,55 @@ function _sf_search_form_user_maps($nid) {
 }
 
 /**
+ * Returns an array of all ubercart countries.
+ */
+function _sf_search_countries() {
+  $countries = cache_get('sf_search_countries');
+
+  if (!$countries) { 
+    $countries = array();
+    $result = db_query("SELECT country_id, country_iso_code_2 FROM {uc_countries}");
+    while ($data = db_fetch_object($result)) {
+      $countries[$data->country_iso_code_2] = $data->country_id;
+    }
+    
+    cache_set('sf_search_countries', $countries, 'cache', time() + 360);
+    // return hot version
+    return $countries;
+  }
+  
+  // return cached version
+  return $countries->data;
+}
+
+/**
+ * Return an array of all ubercart zones.
+ */
+function _sf_search_zones() {
+  $zones = cache_get('sf_search_zones');
+  
+  if (!$zones) {
+    $zones = array();
+    $result = db_query("SELECT zone_id, zone_code FROM {uc_zones}");
+    while ($data = db_fetch_object($result)) {
+      $zones[$data->zone_code] = $data->zone_id;
+    }
+    cache_set('sf_search_zones', $zones, 'cache', time() + 360); 
+    // return hot version 
+    return $zones;
+  }
+  
+  // return cached version
+  return $zones->data;
+}
+
+/**
  * Adds the module's scripts to the page.
  */
 function _sf_search_add_scripts() {
   $path = drupal_get_path('module', 'sf_search');
   drupal_add_js($path . '/js/jquery.dataTables.js');
+  drupal_add_js($path . '/js/jquery-ui-1.8.19.custom.min.js');
   drupal_add_js($path . '/js/sf_search.js');
+  drupal_add_css($path . '/css/sf_search.css');
 }

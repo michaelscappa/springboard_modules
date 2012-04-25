@@ -1,0 +1,30 @@
+/* styles for sf_search module */
+
+/* search form */
+#sf-search-search-form {
+
+}
+
+#edit-sf-search-query-wrapper,
+#edit-sf-search-donor-id-wrapper {
+  display: inline;
+}
+
+#edit-sf-search-search-form-submit,
+#edit-sf-search-lookup-form-submit {
+  margin: 0;
+}
+
+/* lookup form */
+#sf-search-lookup-form {
+  border: 1px solid #000;
+}
+
+#sf-search-lookup-loading {
+  display: none;
+  padding-left: 20px;
+  background: url(/sites/all/modules/springboard/sf_search/img/loader.gif) no-repeat left center;
+}
+
+
+  
