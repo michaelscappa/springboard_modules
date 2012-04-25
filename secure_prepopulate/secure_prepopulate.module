@@ -109,7 +109,7 @@ function secure_prepopulate_init() {
     $af = $_GET['af'];
     $nid = arg(1);
     // Use the full query string for hash expiration.
-    $qs = !empty($_SERVER['QUERY_STRING']) ? $_SERVER['QUERY_STRING'] : 'q=node/' . $nid . '&af=' . $af;
+    $qs = _secure_prepopulate_stringify_get($_GET);
     // first, check to see if the query string has already been used
     if (!secure_prepopulate_is_expired($qs)) {
       // run af param through decryption routine
@@ -597,4 +597,21 @@ function pkcs5_unpad($text)
    $pad = ord($text{strlen($text)-1});
    if ($pad > strlen($text)) return false;
    return substr($text, 0, -1 * $pad);
+}
+
+
+/****************************************************************
+ * Miscellaneous utility functions
+ ***************************************************************/
+
+/**
+ * Standardize the complete query string.
+ */
+function _secure_prepopulate_stringify_get($get) {
+  $string = '';
+  ksort($get);
+  foreach ($get as $key => $value) {
+    $string .= $key . '=' . $value . '&';
+  }
+  return substr($string, 0, strlen($string) - 1);
 }
