@@ -1,0 +1,48 @@
+<?php
+
+/**
+ * @file
+ * Secure prepopulate tests for anonymous users.
+ */
+
+include_once(dirname(__FILE__) . '/secure_prepopulate.test');
+
+class AuthenticatedUserTestCase extends SecurePrepopulateTestCase {
+  
+  public static function getInfo() {
+    return array(
+      'name' => 'Secure pre-populate authenticated user tests',
+      'description' => 'Tests secure pre-populate with authenticated users.',
+      'group' => 'Springboard',
+    );
+  }
+
+  /**
+   * Test pre-population for an authenticated user
+   */
+  function testAuthenticatedPopulate() {
+    global $user;
+    $test_user_name = 'test_af_user';
+    
+    // create test user
+    db_query(
+      "INSERT INTO {users} SET uid=:uid, name=:name, created=UNIX_TIMESTAMP(), status=:status;",
+      array(':uid' => $this->_uid, ':name' => $test_user_name, ':status' => 1)
+    );
+
+    // load the prepopulated form; user should be logged in automatically
+    $node = $this->webformNode();
+    $this->drupalGet("node/$node->nid", array('query' => array('af' => $this->_encrypted)));
+    $this->assertNoFieldByName('pass', NULL, t('User was logged in.'));
+    $this->assertFieldByName('submitted[first_name]', 'Euro', t('Form was pre-populated.'));
+    $this->pass(var_export($this->drupalGetContent(), TRUE));
+    
+    // re-load the form via the "not me" link; user should be logged back out
+    $this->drupalGet("secure-prepopulate/not-me/$node->nid");
+    $this->assertFieldByName('pass', NULL, t('User was logged out.'));
+    $this->assertFieldByName('submitted[first_name]', NULL, t('Form was re-displayed.'));
+    $this->assertNoFieldByName('submitted[first_name]', 'Euro', t('Form was not pre-populated.'));
+    
+    $this->pass(var_export($this->drupalGetContent(), TRUE)); 
+  }
+}

@@ -9,6 +9,7 @@ class SecurePrepopulateTestCase extends DrupalWebTestCase {
   private $_webform_node;
   private $_test_components;
   public $_encrypted; 
+  public $_uid;
   
   /**
    * Implementation of setUp().
@@ -27,6 +28,7 @@ class SecurePrepopulateTestCase extends DrupalWebTestCase {
     variable_set('webform_node_types', array('webform'));
     
     $this->_encrypted = 'zBYBEVb6oX39UMG3b7HFlWTHbQ/L6Gd20MM2JexIVQ6msawBjeTa/MMjQFc9jnNA'; // encrypted = first_name=Euro&last_name=Guy&uid=29
+    $this->_uid = 29; // see note on assignment of $this->_encrypted
   }
   
   /**
