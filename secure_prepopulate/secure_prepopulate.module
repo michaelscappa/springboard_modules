@@ -72,7 +72,7 @@ function secure_prepopulate_theme() {
 function secure_prepopulate_nodeapi(&$node, $op, $teaser = NULL, $page = NULL) {
   // first check to see if there is any prepopulate values available
   if (is_array($_SESSION['secure_prepopulate_values'])) {
-    if ($op == 'view' && $page && !empty($node->webform) && array_key_exists($node->nid, $_SESSION['secure_prepopulate_values'])) {
+    if ($op == 'view' && $page && array_key_exists($node->nid, $_SESSION['secure_prepopulate_values'])) {
       $node->content['welcome_back'] = array(
         '#value' => theme(array('secure_prepopulate_welcome_message_' . $node->nid, 'secure_prepopulate_welcome_message'), $_SESSION['secure_prepopulate_values'][$node->nid], $node->nid),
         '#weight' => -1,
@@ -117,15 +117,12 @@ function secure_prepopulate_init() {
  * Implementation of hook_form_alter().
  */
 function secure_prepopulate_form_alter(&$form, $form_state, $form_id) {
-  // make sure the node has a webform
+  // Check for webform prepopulated forms.
   if (strstr($form_id, 'webform_client_form')) {
-  
     $node = $form['#parameters'][2];
-
     // see if the user has any pre-popluate data for this node in their session
     $prepopulate_data = isset($_SESSION['secure_prepopulate_values'][$node->nid]) ? $_SESSION['secure_prepopulate_values'][$node->nid] : NULL;
     $precedence = variable_get('secure_prepopulate_precedence', 'url');
-    
     // if we have some data to pre-populate add a function to call on after_build so we can be sure that we're the last ones to alter the form
     if (!empty($prepopulate_data)) {
       // if a user is logged in, the precedence must be set to url
@@ -135,31 +132,62 @@ function secure_prepopulate_form_alter(&$form, $form_state, $form_id) {
       }
     }			  
   }
+
+  // Check for any additional prepopulated forms.
+  $prepopulate_forms = variable_get('secure_prepopulate_additional_forms', '');
+  if (!empty($prepopulate_forms)) {
+    // If this form is a prepopulated form.
+    if (strpos($prepopulate_forms, $form_id) !== FALSE) {
+      // Then we find some fields and match them in place.
+      $node = $form['#parameters'][2] = node_load($form['#node']->nid);
+      $prepopulate_data = isset($_SESSION['secure_prepopulate_values'][$node->nid]) ? $_SESSION['secure_prepopulate_values'][$node->nid] : NULL;
+      $precedence = variable_get('secure_prepopulate_precedence', 'url');
+      if (!empty($prepopulate_data)) {
+        if (!user_is_logged_in() || (user_is_logged_in() && $precedence == 'url')) {
+          $form['#after_build'][] = 'secure_prepopulate_after_build';       
+          $form['#submit'][] = 'secure_prepopulate_submit'; 
+        }
+      }		
+    }
+  }
 }
 
 /**
  * After build form alteration routine to ensure that url prepopulation is the last thing that happens.
  */
 function secure_prepopulate_after_build($form, &$form_state) {
-  $node = $form['#parameters'][2];
-  
-  // see if the user has any pre-populate data for this node in their session
-  $prepopulate_data = isset($_SESSION['secure_prepopulate_values'][$node->nid]) ? $_SESSION['secure_prepopulate_values'][$node->nid] : array();
-
   if (!empty($form_state['submitted'])) {
     // Skip the prepopulate work, as we've already submitted the form and it is
     // being validated or otherwise altered by the user. Exit here cleanly.
     return $form;
   }
 
+  // Gather related data.
+  $node = $form['#parameters'][2];
+  $prepopulate_data = isset($_SESSION['secure_prepopulate_values'][$node->nid]) ? $_SESSION['secure_prepopulate_values'][$node->nid] : array();
   $precedence = variable_get('secure_prepopulate_precedence', 'url');
+
+  // If this is a webform, replace components.
+  if (isset($node->webform['components'])) {
+    return secure_prepopulate_after_build_webform($form, $form_state, $node, $prepopulate_data, $precedence);
+  }
+  // If this is a normal form, replace values.
+  else {
+    return secure_prepopulate_after_build_form($form, $form_state, $node, $prepopulate_data, $precedence);
+  }
+}
+
+/**
+ * After build form alteration for webform forms.
+ */
+function secure_prepopulate_after_build_webform($form, &$form_state, $node, $prepopulate_data, $precedence) {
+  // Get components.
   $components = $node->webform['components'];
-  // create an data structure that will tell us exactly where each webform component lives in the FAPI array
-  $component_hierarchy = _secure_prepopulate_parse_form($node->nid, $components);
+  $component_hierarchy = _secure_prepopulate_parse_webform_form($node->nid, $components);
 
   // try to prepopulate any fields found in the prepopulate_data array
   foreach ($prepopulate_data as $form_key => $value) {
-    if ($field =& _secure_prepopulate_find_field($form, $component_hierarchy[$form_key])) {
+    if ($field =& _secure_prepopulate_find_webform_field($form, $component_hierarchy[$form_key])) {
       switch ($field['#type']) {
         case 'radios':
           // radios will have individual radio form fields inside them
@@ -190,7 +218,7 @@ function secure_prepopulate_after_build($form, &$form_state) {
   // Clear out any other form fields that might be populated by another module
   foreach($component_hierarchy as $form_key => $value) {
     if (!array_key_exists($form_key, $prepopulate_data)) { // the key is not in the prepopuldate data, so lets clear it out
-      if ($field =& _secure_prepopulate_find_field($form, $component_hierarchy[$form_key])) {
+      if ($field =& _secure_prepopulate_find_webform_field($form, $component_hierarchy[$form_key])) {
         // set back to original default value by using the webform component definition
         switch ($field['#type']) {
           case 'hidden':
@@ -233,7 +261,21 @@ function secure_prepopulate_after_build($form, &$form_state) {
       }
     }
   }
-    
+  return $form;
+}
+
+
+/**
+ * After build form alteration for normal forms.
+ */
+function secure_prepopulate_after_build_form($form, &$form_state, $prepopulate_data, $precedence) {
+  // Try to prepopulate any fields found in the prepopulate_data array.
+  foreach ($prepopulate_data as $form_key => $value) {
+    if ($field =& _secure_prepopulate_find_form_field($form, $form_key)) {
+      $field['#value'] = $value;  
+      $field['#default_value'] = $value;
+    }
+  }
   return $form;
 }
 
@@ -405,6 +447,26 @@ function _secure_prepopulate_convert_state($state) {
 }
 
 /****************************************************************
+ * Utility functions for parsing normal forms
+ ***************************************************************/
+/**
+ * Returns a reference to an element of a FAPI array based on given value.
+ * 
+ * @param $form
+ *   The form array that contains the field to find.
+ * @param $value
+ *   A field element.
+ */
+function &_secure_prepopulate_find_form_field(&$form, $key) {
+  if (isset($form[$key])) {
+    return $form[$key];
+  }
+  foreach (element_children($form) as $field_name) {
+    return _secure_prepopulate_find_form_field($form[$field_name], $key);
+  }
+}
+
+/****************************************************************
  * Utility functions for parsing through webforms
  ***************************************************************/
  
@@ -416,7 +478,7 @@ function _secure_prepopulate_convert_state($state) {
  * @param $components
  *   The webform components array attached to the node.
  */
-function _secure_prepopulate_parse_form($nid, $components) {
+function _secure_prepopulate_parse_webform_form($nid, $components) {
   $component_hierarchy = array();
   foreach($components as $cid => $component) {
     $component_path = 'submitted[' . implode('][', _secure_prepopulate_walk_component_hierarchy($nid, $cid)) . ']';
@@ -456,11 +518,11 @@ function _secure_prepopulate_walk_component_hierarchy($nid, $cid, &$path = array
  * @param $path
  *   A nested array that represents the path to the field within the FAPI array.
  */
-function &_secure_prepopulate_find_field(&$form, $path) {
+function &_secure_prepopulate_find_webform_field(&$form, $path) {
   if (is_array($path)) {
   foreach(array_keys($path) as $v) {
     if (is_array($path[$v]) && count($path[$v])) { // if there are more keys
-      return _secure_prepopulate_find_field($form[$v], $path[$v]);
+      return _secure_prepopulate_find_webform_field($form[$v], $path[$v]);
     }
     else {
       return $form[$v];
