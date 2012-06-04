@@ -35,7 +35,7 @@ function secure_prepopulate_admin_settings(&$form_state) {
 
   $form['advanced'] = array(
     '#type' => 'fieldset',
-    '#name' => t('Advanced settings'),
+    '#title' => t('Advanced settings'),
     '#collapsible' => TRUE,
     '#collapsed' => TRUE,
   );
