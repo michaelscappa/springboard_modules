@@ -75,7 +75,11 @@ function dynamic_gift_strings_form_alter(&$form, $form_state, $form_id) {
     if (is_array($_SESSION['dynamic_gift_string_values'][$node->nid])) {
       $gs = $_SESSION['dynamic_gift_string_values'][$node->nid];
       // create an array of amounts to replace the defaults
-      $amounts = _dynamic_gift_strings_parse_amounts($gs['amounts'], TRUE, $node->nid);     
+      $other = FALSE;
+      if ($other_field =& _secure_prepopulate_find_form_field($form, 'other_amount')) {
+        $other = TRUE;
+      }
+      $amounts = _dynamic_gift_strings_parse_amounts($gs['amounts'], $other, $node->nid);     
       // grab the default
       $default = $gs['default'];
       // parse out the form components so we can find the 'amount' field
