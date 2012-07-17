@@ -139,7 +139,7 @@ function secure_prepopulate_form_alter(&$form, $form_state, $form_id) {
     // If this form is a prepopulated form.
     if (strpos($prepopulate_forms, $form_id) !== FALSE) {
       // Then we find some fields and match them in place.
-      $node = $form['#parameters'][2] = node_load($form['#node']->nid);
+      $node =  $form['#parameters'][2] = isset($form['#parameters'][2]) ? $form['#parameters'][2] : node_load( arg(1) ); // Fallback to node id from path.
       $prepopulate_data = isset($_SESSION['secure_prepopulate_values'][$node->nid]) ? $_SESSION['secure_prepopulate_values'][$node->nid] : NULL;
       $precedence = variable_get('secure_prepopulate_precedence', 'url');
       if (!empty($prepopulate_data)) {

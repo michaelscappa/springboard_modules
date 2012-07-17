@@ -65,6 +65,32 @@ function dynamic_gift_strings_form_alter(&$form, $form_state, $form_id) {
       }
     }
   }
+
+
+  // Check for any additional prepopulated forms. For now, this only works on node types.
+  // But can now work on non-webform node donation pages.
+  $prepopulate_forms = variable_get('secure_prepopulate_additional_forms', '');
+  if ( !empty($prepopulate_forms) && (strpos($prepopulate_forms, $form_id) !== FALSE) ) {
+    $node =  $form['#parameters'][2] = isset($form['#parameters'][2]) ? $form['#parameters'][2] : node_load( arg(1) ); // Fallback to node id from path.
+    if (is_array($_SESSION['dynamic_gift_string_values'][$node->nid])) {
+      $gs = $_SESSION['dynamic_gift_string_values'][$node->nid];
+      // create an array of amounts to replace the defaults
+      $amounts = _dynamic_gift_strings_parse_amounts($gs['amounts'], TRUE, $node->nid);     
+      // grab the default
+      $default = $gs['default'];
+      // parse out the form components so we can find the 'amount' field
+      $amount_field =& _secure_prepopulate_find_form_field($form, 'amount');
+      if ($amount_field && $amounts) {
+        $amount_field['#options'] = $amounts;
+        // set the default if available
+        if (is_numeric($default)) {
+          $amount_field['#default_value'] = $default;
+        }
+      }
+      // add a submit handler to clear out gift strings if the user donates        
+      $form['#submit'][] = 'dynamic_gift_strings_submit';
+    }
+  }
   
   // add some settings to the secure prepopulate form
   if ($form_id == 'secure_prepopulate_admin_settings') {
