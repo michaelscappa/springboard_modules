@@ -426,6 +426,11 @@ function sf_user_form_alter(&$form, $form_state, $form_id) {
       '#collapsed' => TRUE,
       '#weight' => -1,
     );
+    $form['sf_user']['sf_user_delete'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('Delete related Salesforce object when user is deleted'),
+      '#default_value' => variable_get('sf_user_delete', FALSE),
+    );
   }
 }
 
@@ -461,14 +466,17 @@ function sf_user_user($op, &$edit, &$account, $category = NULL) {
 		
 		// delete	
 		case 'delete':
-			// remove from queue
-			$salesforce = salesforce_management_api_id_load('user', $account->uid);
-			// only insert users that have already been exported to salesforce
-			if (!empty($salesforce)) {
-				sf_queue_insert($account->uid, 'user', 'delete');
-			}
-			else {
-				sf_queue_delete($account->uid, 'user'); 
+		  // Only do this if the toggle to allow deletion from Drupal is active.
+		  if (variable_get('sf_user_delete', FALSE)) {
+        // remove from queue
+        $salesforce = salesforce_management_api_id_load('user', $account->uid);
+        // only insert users that have already been exported to salesforce
+        if (!empty($salesforce)) {
+          sf_queue_insert($account->uid, 'user', 'delete');
+        }
+        else {
+          sf_queue_delete($account->uid, 'user'); 
+        }
 			}
     	break;					
   }
