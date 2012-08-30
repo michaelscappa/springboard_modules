@@ -1351,7 +1351,7 @@ function fundraiser_recurring_check_access() {
  * Returns an array of available zone id's associated with the country id.
  */
 function fundraiser_get_country_zones($country_id) {
-	$zones = uc_zone_select(uc_get_field_name('zone'), NULL, NULL, $country_id, 'name', uc_address_field_required('zone'));
+	$zones = uc_zone_select(uc_get_field_name('zone'), NULL, NULL, $country_id, 'code', uc_address_field_required('zone'));
 	$zone_array = array();
 	foreach ($zones['#options'] as $key => $value) {
 		$zone_array[$key] = $value;
