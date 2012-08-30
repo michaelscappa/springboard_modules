@@ -1,2 +1,4 @@
 - Pull request: https://github.com/JacksonRiver/springboard_modules/pull/59 by benclark: Fixed access issues with recurring payment tab (user/%user/recurring_overview/%).
 
+2012-30-20  Sarah H.  <sarah.hood@jacksonriver.com>
+* fundraiser.module (fundraiser_get_country_zones): IFAW #1044 - Ordering zones from UC according to code instead of name to support non-roman alphabetical orders in cases such as Japanese, Russian, Chinese or Korean.
