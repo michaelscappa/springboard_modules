@@ -1351,12 +1351,16 @@ function fundraiser_recurring_check_access() {
  * Returns an array of available zone id's associated with the country id.
  */
 function fundraiser_get_country_zones($country_id) {
-	$zones = uc_zone_select(uc_get_field_name('zone'), NULL, NULL, $country_id, 'code', uc_address_field_required('zone'));
-	$zone_array = array();
-	foreach ($zones['#options'] as $key => $value) {
-		$zone_array[$key] = $value;
-	}
-	return $zone_array;
+  static $zone_array;
+  if (isset($zone_array[$country_id])) {
+    return $zone_array[$country_id];
+  }
+  $results = db_query("SELECT * FROM {uc_zones} WHERE zone_country_id = %d ORDER BY zone_code", $country_id);
+  $zone_array[$country_id] = array()
+  while ($zone = db_fetch_object($results)) {
+    $zone_array[$country_id][$zone->zone_id] = $zone->zone_name;
+  }
+  return $zone_array[$country_id];
 }
 
 /**
