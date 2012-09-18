@@ -2,3 +2,12 @@
 gm_authorizenet 6.x-3.0, 2012-04-25
 ------------------------------
 Added feature to hide donor emails from authnet transactions.
+
+2012-12-18 Sarah Hood  <sarah.hood@jacksonriver.com>
+
+    * gm_authorize.module - Misc Coder compliance updates throughout.
+    * gm_authorize.module (gm_authorizenet_settings_form): Added administration field for mapping webform components to custom field names.
+    * gm_authorize.module (_gm_authorizenet_cim_profile_charge_request): Added mapping webform components to extraOptions field.
+    * gm_authorize.module (gm_authorizenet_fundraiser_add_order_fields): Implements hook_fundraiser_add_order_fields.
+    * gm_authorize.module (_gm_authorizenet_charge): Set merchant defined custom fields.
+    * gm_authorize.module (_gm_authorizenet_array_to_xml): Properly converts extraOptions to CDATA string instead of regular XML.
