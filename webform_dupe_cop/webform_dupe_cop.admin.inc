@@ -3,36 +3,43 @@
  * @file
  * Administration page callbacks for the webform_dupe_cop module.
  */
- 
+
 /**
- * Settings form for webform_user
+ * Admin settings form.
  */
 function webform_dupe_cop_settings_form() {
-  $form['webform_dupe_cop_hours'] = array(
+  $form['webform_dupe_cop_timespan'] = array(
     '#type' => 'textfield',
-    '#size' => 4,
-    '#title' => t('Time span for dupe protection (in hours)'),
-    '#default_value' => variable_get('webform_dupe_cop_hours', 0),
-    '#description' => t('Each webform submission will be protected from duplicates for this period after the time when it was first submitted. Enter 0 to protect each submission forever.'),
+    '#title' => t('Time span'),
+    '#default_value' => variable_get('webform_dupe_cop_timespan', '1 hour'),
+    '#description' => t('Each webform submission will be protected from duplicates for this period after the time when it was ' .
+      'first submitted. Use the string format as given in the documentation for %url. Set to 0 for no time span limits.',
+      array('%url' => l('strtotime()', 'http://php.net/manual/en/datetime.formats.relative.php'))),
   );
-  
+  $form['webform_dupe_cop_toggle'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Intercept submission'),
+    '#default_value' => variable_get('webform_dupe_cop_toggle', 'TRUE'),
+    '#description' => t('Toggle interception of duplicated forms. Uncheck this to just log the incident.'),
+  );  
   $form['webform_dupe_cop_message'] = array(
     '#type' => 'textarea',
     '#rows' => 3,
-    '#title' => t('Message to display on dupe submission'),
-    '#default_value' => variable_get('webform_dupe_cop_message', ''),
-    '#description' => t('Optional. You can use [date] and [time] to substitute the date and time of the original submission.'),
+    '#title' => t('Message'),
+    '#default_value' => variable_get('webform_dupe_cop_message', '%date %time - Dupe detected at %webform_id by %user_id matches ' .
+      'a submission submitted at %prev_date %prev_time.'),
+    '#description' => t('Optional. Message  to display on dupe submission. You can use %date, %time, %webform_id, %user_id to substitute ' .
+      'the date and time of the original submission.'),
   );
-  
-	// add our own validation handler
 	$form['#validate'][] = 'webform_dupe_cop_settings_form_validate';
-//	$form['#submit'][] = 'webform_user_settings_form_submit';
-	
 	return system_settings_form($form);
 }
 
+/**
+ * Validate handler for admin form.
+ */
 function webform_dupe_cop_settings_form_validate($form, &$form_settings) {
-  if (!is_numeric($form_settings['values']['webform_dupe_cop_hours'])) {
-    form_set_error('webform_dupe_cop_hours', t('Time span must be a number'));
+  if (!strtotime($form_settings['values']['webform_dupe_cop_timespan'])) {
+    form_set_error('webform_dupe_cop_timespan', t('Time span must be a valid textual datetime description.'));
   }
 }

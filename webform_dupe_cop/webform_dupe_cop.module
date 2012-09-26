@@ -16,7 +16,6 @@ function webform_dupe_cop_menu() {
 		'type' => MENU_NORMAL_ITEM,
 		'file' => 'webform_dupe_cop.admin.inc',
 	);
-	
 	return $items;
 }
 
@@ -32,57 +31,81 @@ function webform_dupe_cop_perm() {
  */
 function webform_dupe_cop_form_alter(&$form, &$form_state, $form_id) {
   if (strpos($form_id, 'webform_client_form_') === 0) {
-    if (is_array($form['#validate'])) {
-      array_push($form['#validate'], 'webform_dupe_cop_client_form_validate');
-    } else {
-      $form['#validate'][] = 'webform_dupe_cop_client_form_validate';
-    }
+    $form['#validate'][] = 'webform_dupe_cop_client_form_validate';
     $form['#submit'][] = 'webform_dupe_cop_client_form_submit';
   }
 }
 
 /**
- * Form validation fails up front if the submitted values are an exact match with a prior submission
+ * Implementation of hook_webform_submission_delete().
  */
-function webform_dupe_cop_client_form_validate($form, &$form_state) {
-  $hash = webform_dupe_cop_submission_hash($form_state['values']['submitted']);
-  $nid = $form_state['values']['details']['nid'];
-  $timespan_hours = variable_get('webform_dupe_cop_hours', 0);
-  $minimum_timestamp = ($timespan_hours > 0) ? (time() - $timespan_hours * 60 * 60) : 0;
-  $submitted = db_result(db_query(
-    "SELECT submitted
-      FROM {webform_dupe_cop} wdc
-        INNER JOIN {webform_submissions} ws ON ws.sid=wdc.sid
-      WHERE wdc.submission_hash='%s' AND ws.nid=%d AND ws.submitted > %d
-    ;",
-    $hash, $nid, $minimum_timestamp
-  ));
-  if ($submitted) {
-    $date = format_date($submitted, 'custom',  'F j');
-    $time = format_date($submitted, 'custom', 'g:i a');
-    $message = variable_get(
-      'webform_dupe_cop_message', 
-      t('These exact values were already submitted on %date at %time.', array( 
-        '%date' => $date, '%time' => $time
-      ))
-    );
-    $message = str_replace('[date]', $date, $message);
-    $message = str_replace('[time]', $time, $message);
-    form_set_error('submitted', $message);
+function webform_dupe_cop_webform_submission_delete($node, $submission) {
+  if ($sid = $submission->sid) {
+    db_query('DELETE FROM {webform_dupe_cop} WHERE sid = %d', $sid);
   }
 }
 
 /**
- * Form submission records an MD5 hash of the submitted values.
+ * Form validation handler, checks for previously submitted form values.
  */
-function webform_dupe_cop_client_form_submit($form, &$form_state) {
-  $hash = webform_dupe_cop_submission_hash($form_state['values']['submitted_tree']);
-  $sid = $form_state['values']['details']['sid'];
-  db_query("INSERT INTO {webform_dupe_cop} SET sid=%d, submission_hash='%s';", $sid, $hash);
+function webform_dupe_cop_client_form_validate($form, &$form_state) {
+  // Make a hash out of user submitted values.
+  $hash = webform_dupe_cop_submission_hash($form_state['values']['submitted']);
+  // We prehash and add to the form_state because webform in our environment can (and will) be manipulated
+  // during the course of submission. We cannot guarantee that the hash during validation will match the
+  // hash during submission. So we do it here, and save it for the submission stage.
+  $form_state['webform_dupe_cop'] = $hash;
+  // Check for previous submissions within the configured time frame.
+  $nid = $form_state['values']['details']['nid'];
+  $timespan = trim(variable_get('webform_dupe_cop_timespan', '1 hour'));
+  $minimum_timestamp = ($timespan_hours != '0') ? (strtotime($timespan . ' ago')) : 0;
+  $submitted = db_result(db_query(
+    "SELECT submitted
+      FROM {webform_dupe_cop} wdc
+        INNER JOIN {webform_submissions} ws ON ws.sid=wdc.sid
+      WHERE wdc.submission_hash='%s' AND ws.nid=%d AND ws.submitted > %d",
+    $hash, $nid, $minimum_timestamp
+  ));
+  // If this form has been submitted before.
+  if ($submitted) {
+    // Gather additional data for the submission.
+    global $user;
+    $date = format_date(strtotime('now'), 'custom',  'm/d/y');
+    $time = format_date(strtotime('now'), 'custom', 'H:i:s');
+    $webform_id = $nid;
+    $user_id = $user->uid;
+    $prev_date = format_date($submitted, 'custom',  'm/d/y');
+    $prev_time = format_date($submitted, 'custom', 'H:i:s');
+    // If we're set to intercept the form, do so.
+    if (variable_get('webform_dupe_cop_toggle', 'TRUE')) {
+      $message = variable_get('webform_dupe_cop_message', '%date %time - Dupe detected at %webform_id by %user_id matches ' .
+        'a submission submitted at %prev_date %prev_time.');
+      $message = t($message, array('%date' => $date, '%time' => $time, '%webform_id' => $webform_id, '%user_id' => $user_id,
+         '%prev_date' => $prev_date, '%prev_time' => $prev_time));
+      form_set_error('submitted', $message);
+    }
+    // Log the error to watchdog.
+    $headers = webform_dupe_cop_fetch_headers();
+    $log_message = '%date %time - Dupe detected at %webform_id by %user_id matches a submission submitted at %prev_date %prev_time. ' .
+      'Headers: %headers'; // Standard message, no override.
+    watchdog('webform_dupe_cop', $log_message, array('%date' => $date, '%time' => $time, '%webform_id' => $webform_id,
+      '%user_id' => $user_id, '%prev_date' => $prev_date, '%prev_time' => $prev_time, '%headers' => $headers), WATCHDOG_ALERT);
+  }
 }
 
 /**
- * Utility function to produce standardized submitted values hash from an array.
+ * Form submission handler, records an MD5 hash of the submitted values.
+ */
+function webform_dupe_cop_client_form_submit($form, &$form_state) {
+  // After a successful submission, record the hash and sid for future use.
+  $submission_hash = $form_state['webform_dupe_cop'];
+  $sid = $form_state['values']['details']['sid'];
+  $record = array('sid' => $sid, 'submission_hash' => $submission_hash);
+  drupal_write_record('webform_dupe_cop', $record);
+}
+
+/**
+ * Helper function to produce standardized submitted values hash from an array.
  * @param Array $values
  */
 function webform_dupe_cop_submission_hash($values) {
@@ -92,10 +115,11 @@ function webform_dupe_cop_submission_hash($values) {
 }
 
 /**
- * Implementation of hook_webform_submission_delete().
+ * Helper function, returns an array of request and response headers for the current request.
  */
-function webform_dupe_cop_webform_submission_delete($node, $submission) {
-  if ($sid = $submission->sid) {
-    db_query("DELETE FROM {webform_dupe_cop} WHERE sid=%d;", $sid);
-  }
+function webform_dupe_cop_fetch_headers() {
+  return json_encode(array(
+    'request' => apache_request_headers(),
+    'response' => apache_response_headers(),
+  ));
 }
