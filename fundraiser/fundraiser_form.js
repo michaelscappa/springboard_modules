@@ -3,7 +3,10 @@ Drupal.behaviors.fundraiserBehavior = function() {
   // Auto-populate the internal name field
   $("#edit-title").blur(function() {
     $title = $(this).attr('value');
-    $("#edit-internal-name").val($title);
+    var currently = $("#edit-internal-name").attr('value');
+    if (currently.length == 0) {
+      $("#edit-internal-name").val(title);
+    }
   });
 
   // Remove form elements when remove button is clicked.
