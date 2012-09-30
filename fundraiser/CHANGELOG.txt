@@ -58,3 +58,8 @@
 2012-09-20 Jeremy Isett  <jeremy.isett@jacksonriver.com>
 
     * fundraiser.module:  Prevent anonymous user from recieving incorrect country code
+
+2012-19-30 Sarah Hood <sarah.hood@jacksonriver.com>
+
+    * fundraiser_form.js: Make sure if there is already a value in the internal title it doesn't get overwritten 
+      when the title is changed. Backported feature from the D7 port.
