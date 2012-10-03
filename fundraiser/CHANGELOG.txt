@@ -66,3 +66,6 @@
 
     * fundraiser.sustainer.forms.inc: Change how the function determines if the
     billing update operation succeeded. Added logging for failed updates.
+
+2012-10-03  Sarah Hood  <sarah.hood@jacksonriver.com>
+    * fundraiser.js: Disable auto complete on CC and CVV fields for fundraiser forms.

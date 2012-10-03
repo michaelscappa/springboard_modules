@@ -3,6 +3,9 @@
  */
 Drupal.behaviors.fundraiser = function(context) {
 
+  // Turn autocomplete off on CC and CVV form elements.
+  $('#edit-submitted-credit-card-information-card-number, #edit-submitted-credit-card-information-card-cvv').attr('autocomplete','off');
+
   // Make sure cc number and cvv are numeric
   $('#edit-submitted-credit-card-information-card-number').numeric();
   $('#edit-submitted-credit-card-information-card-cvv').numeric();
