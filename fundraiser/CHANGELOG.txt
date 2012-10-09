@@ -1,3 +1,9 @@
+2012-09-10  Allen Freeman <allen.freeman@jacksonriver.com>
+
+    * fundraiser.module (fundraiser_update_node): added code to prevent arbitrary node properties from being overwritten
+      when node_save() is invoked and the property is unset(). This is in response to a bug wherein confirmation page format
+      reverts to "filtered HTML" if the node form is edited.
+
 2012-09-03  Allen Freeman  <allen.freeman@jacksonriver.com>
 
     * fundraiser.module (fundraiser_preprocess_fundraiser_confirmation): renamed template_preprocess_fundraiser_confirmation.
