@@ -601,7 +601,6 @@ function fundraiser_node_update(&$node) {
   foreach ($old_node as $key => $value) {
     if (in_array($key, $settings) && !isset($node->$key)) {
       $node->$key = $value;
-      drupal_set_message("set $key -> $value");
     }
   }
 
