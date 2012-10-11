@@ -18,7 +18,25 @@ Drupal.behaviors.fundraiser = function(context) {
   // When other amount changes, make sure the amount radio is correctly set.
   $('#edit-submitted-donation-other-amount').change(function() {
     if ($(this).val() != '') {
-      $(':radio[value=other]').attr('checked', true);
+      $('#webform-component-donation--amount :radio[value=other]').attr('checked', true);
+    }
+    // If the amount has been set to empty, or if the amount changed and set the radio box to other.
+    // And the alert is visible, remove it.
+    $('#fundraiser-amount-error').remove();
+  });
+
+  // When the radio button changes, if it was set to other and other still has a value in it.
+  // Make sure the user picks one or the other.
+  $('#webform-component-donation--amount input[name="submitted[donation][amount]"]').change(function() {
+    if ($(this).val() != 'other' && $('#edit-submitted-donation-other-amount').val() != '') {
+      // Throw up a message.
+      $(this).parents('#webform-component-donation--amount').after('<div id="fundraiser-amount-error" class="messages error">' +
+        'You have entered a custom amount and selected a set amount. Please choose the "Other" button if you ' +
+        'intend to donate a custom amount, or clear the "Other Amount" text field to give a set amount.' +
+        '</div>');
+    }
+    else {
+      $('#fundraiser-amount-error').remove();
     }
   });
 
