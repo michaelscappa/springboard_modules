@@ -1618,6 +1618,13 @@ function fundraiser_webform_validate($form, &$form_state) {
 	$cc_expiration_year = $fundraiser_fields['card_expiration_year'];
 	$email = $fundraiser_fields['email'];
 
+	// Check for confusing selection.
+	if (!empty($fundraiser_fields['other_amount']) && $donation_amount != 'other') {
+    form_set_error('other_amount', 'You have entered a custom amount and selected a set amount. Please clarify which amount you intend to give, if you want ' .
+      'to give the amount that appears in the other box, please select Other from the radio buttons.');
+		$errors = true;
+	}
+
     $amount_field = 'submitted][donation][amount';
     // look for other amount
     if ($donation_amount == "other") {
